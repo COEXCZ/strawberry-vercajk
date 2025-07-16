@@ -101,6 +101,7 @@ ignore = [
     "TD003",  # Missing issue link on the line following this TODO
     "TD004",  # Missing colon in TODO
     "TRY003",  # avoid specifying long messages outside the exception class
+    "PLC0415"  # `import` should be at the top-level of a file
 ]
 
 [tool.ruff.lint.isort]
