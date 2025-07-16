@@ -1,6 +1,7 @@
 __all__ = [
     "StrawberryVercajkSettings",
     "app_settings",
+    "configure_strawberry_vercajk"
 ]
 
 import typing
@@ -89,7 +90,7 @@ class AppIDHasherSettings(AppSettingsMixin):
 class AppValidationSettings(AppSettingsMixin):
     @property
     def PYDANTIC_TO_GQL_INPUT_TYPE(self) -> dict[type, type]:  # noqa: N802
-        from strawberry_vercajk import HashedID
+        from strawberry_vercajk.core import HashedID
 
         if self.PYDANTIC_TO_GQL_INPUT_TYPE_EXCLUDE_DEFAULTS:
             defaults = {}
