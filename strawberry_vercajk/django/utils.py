@@ -1,7 +1,8 @@
-
 import django.core.exceptions
 import django.db.models
+
 from strawberry_vercajk._base import exceptions
+
 
 def check_django_field_exists(model: type["django.db.models.Model"], field_path: str) -> None:
     """

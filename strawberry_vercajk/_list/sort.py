@@ -31,6 +31,7 @@ def model_sort_enum[T: "enum.StrEnum"](
 
             try:
                 import django.db.models
+
                 from strawberry_vercajk.django.utils import check_django_field_exists
 
                 if issubclass(model, django.db.models.Model):

@@ -1,7 +1,7 @@
 __all__ = [
     "StrawberryVercajkSettings",
     "app_settings",
-    "configure_strawberry_vercajk"
+    "configure_strawberry_vercajk",
 ]
 
 import typing
@@ -9,8 +9,10 @@ import typing
 import pydantic
 import pydantic_core
 import strawberry
+
 try:
     from django.conf import settings as django_settings
+
     _global_settings = django_settings
 except ImportError:
     _global_settings = None
@@ -54,7 +56,7 @@ class AppSettingsMixin:
         if _global_settings is None:
             raise RuntimeError(
                 "Strawberry vercajk settings are not configured. "
-                "Please call `configure_strawberry_vercajk(settings)` before using the app."
+                "Please call `configure_strawberry_vercajk(settings)` before using the app.",
             )
         return getattr(_global_settings, SETTINGS_NAME, {})
 
@@ -143,5 +145,5 @@ def configure_strawberry_vercajk(
     """
     Configure the Strawberry vercajk app with the given settings.
     """
-    global _global_settings
+    global _global_settings  # noqa: PLW0603
     _global_settings = {SETTINGS_NAME: settings}

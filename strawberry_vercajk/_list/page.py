@@ -19,7 +19,7 @@ class Paginator[T]:
         self,
         object_list: list[T],
         per_page: int,
-        orphans: int =0,
+        orphans: int = 0,
         allow_empty_first_page: bool = True,
     ) -> None:
         self.object_list = object_list
@@ -35,7 +35,7 @@ class Paginator[T]:
         number = self.validate_number(number)
         return self.page(number)
 
-    def _get_page(self, *args: typing.Any, **kwargs: typing.Any) -> "Page[T]":
+    def _get_page(self, *args: typing.Any, **kwargs: typing.Any) -> "Page[T]":  # noqa: ANN401
         return Page(*args, **kwargs)
 
     def validate_number(self, number: int) -> int:
@@ -81,7 +81,6 @@ class Paginator[T]:
         return ceil(hits / self.per_page)
 
 
-
 class Page[T](collections.abc.Sequence):
     """
     Page class copied mostly from Django
@@ -105,8 +104,7 @@ class Page[T](collections.abc.Sequence):
     def __getitem__(self, index: int | slice) -> T:
         if not isinstance(index, (int, slice)):
             raise TypeError(
-                "Page indices must be integers or slices, not %s."
-                % type(index).__name__,
+                f"Page indices must be integers or slices, not {type(index).__name__}.",
             )
         # The object_list is converted to a list so that if it was a QuerySet
         # it won't be a database hit per __getitem__.

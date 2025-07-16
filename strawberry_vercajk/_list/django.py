@@ -6,13 +6,14 @@ import strawberry
 from django.core.paginator import UnorderedObjectListWarning
 
 from strawberry_vercajk._list.processor import BaseListRespHandler
+from strawberry_vercajk.core import Paginator
 
 if typing.TYPE_CHECKING:
-    from strawberry_vercajk import FilterQ, FilterSet, SortInput, Paginator
+    from strawberry_vercajk.core import FilterQ, FilterSet, SortInput
 
 
 def get_django_filter_q(filter_q: "FilterQ", /) -> django.db.models.Q:
-    from strawberry_vercajk import FilterQ
+    from strawberry_vercajk.core import FilterQ
 
     def _evaluate_filter(fq: "FilterQ") -> django.db.models.Q:
         if fq.is_and:
@@ -52,26 +53,23 @@ class DjangoModelPaginator[T: "django.db.models.Model"](Paginator):
         per_page: int,
         orphans: int = 0,
         allow_empty_first_page: bool = True,
-    ):
+    ) -> None:
         super().__init__(object_list, per_page, orphans, allow_empty_first_page)
         self._check_object_list_is_ordered()
 
-    def _check_object_list_is_ordered(self):
+    def _check_object_list_is_ordered(self) -> None:
         """
         Warn if self.object_list is unordered (typically a QuerySet).
         """
         ordered = getattr(self.object_list, "ordered", None)
         if ordered is not None and not ordered:
             obj_list_repr = (
-                "{} {}".format(
-                    self.object_list.model, self.object_list.__class__.__name__
-                )
+                f"{self.object_list.model} {self.object_list.__class__.__name__}"
                 if hasattr(self.object_list, "model")
-                else "{!r}".format(self.object_list)
+                else f"{self.object_list!r}"
             )
             warnings.warn(
-                "Pagination may yield inconsistent results with an unordered "
-                "object_list: {}.".format(obj_list_repr),
+                f"Pagination may yield inconsistent results with an unordered object_list: {obj_list_repr}.",
                 UnorderedObjectListWarning,
                 stacklevel=3,
             )
