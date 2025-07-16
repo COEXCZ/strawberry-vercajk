@@ -102,7 +102,7 @@ class Page[T](collections.abc.Sequence):
         return len(self.object_list)
 
     def __getitem__(self, index: int | slice) -> T:
-        if not isinstance(index, (int, slice)):
+        if not isinstance(index, int | slice):
             raise TypeError(
                 f"Page indices must be integers or slices, not {type(index).__name__}.",
             )
