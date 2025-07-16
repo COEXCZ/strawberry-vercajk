@@ -8,7 +8,7 @@ import pydantic_core
 import strawberry
 import strawberry.extensions
 
-import strawberry_vercajk
+import strawberry_vercajk.core as strawberry_vercajk
 
 
 @strawberry.type

@@ -149,5 +149,9 @@ class Page[T](collections.abc.Sequence):
 
     @functools.cached_property
     def items_count(self) -> int:
-        """Return the count of objects in total - not only on this page."""
-        return self.paginator.count
+        """Return the number of objects on this page."""
+        # Is a close copy of django.core.paginator.Paginator.count
+        c = getattr(self.object_list, "count", None)
+        if callable(c) and not inspect.isbuiltin(c) and func_has_no_args(c):
+            return c()
+        return len(self.object_list)

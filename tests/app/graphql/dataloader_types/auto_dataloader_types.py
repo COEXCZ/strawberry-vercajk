@@ -1,7 +1,7 @@
 import strawberry
 import strawberry.django
 
-import strawberry_vercajk
+import strawberry_vercajk.core as strawberry_vercajk
 from strawberry_vercajk._dataloaders import auto_dataloader_field
 from tests.app import models
 from tests.app.graphql.types import (

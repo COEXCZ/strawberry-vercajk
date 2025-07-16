@@ -19,7 +19,7 @@ __all__ = [
 
 from django.db.models import QuerySet, F, Model, Q, OrderBy
 
-import strawberry_vercajk
+import strawberry_vercajk.core as strawberry_vercajk
 from tests.app import models
 from tests.app.models import FruitPlant
 

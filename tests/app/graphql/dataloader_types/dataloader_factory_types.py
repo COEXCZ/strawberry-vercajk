@@ -3,7 +3,7 @@ import typing
 import strawberry
 import strawberry.django
 
-import strawberry_vercajk
+import strawberry_vercajk.core as strawberry_vercajk
 from strawberry_vercajk._dataloaders import (
     PKDataLoaderFactory, ReverseFKDataLoaderFactory, M2MDataLoaderFactory,
     M2MListDataLoaderFactory,

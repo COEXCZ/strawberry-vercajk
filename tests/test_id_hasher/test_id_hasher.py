@@ -5,7 +5,7 @@ import dataclasses
 import typing
 import strawberry.types.scalar
 
-import strawberry_vercajk
+import strawberry_vercajk.core as strawberry_vercajk
 from strawberry_vercajk._id_hasher.exceptions import (
     InvalidHashIDPrefixError, HashIDNotRegisteredError,
     HashIDAlreadyRegisteredError,

@@ -1,14 +1,10 @@
 import enum
-import typing
 
-import pydantic
 import pytest
 import strawberry
-from django.db.models import QuerySet, F
 
-import strawberry_vercajk
-from strawberry_vercajk import pydantic_to_input_type
-from strawberry_vercajk._list.filter import FilterSet, model_filter, Filter
+from strawberry_vercajk.core import pydantic_to_input_type
+from strawberry_vercajk.django import DjangoListResponseHandler
 from strawberry_vercajk._list.graphql import PageInput, SortInput, ListType
 from strawberry_vercajk._list.sort import model_sort_enum
 from tests.app import factories, models
@@ -33,7 +29,7 @@ class Query:
         sort: SortInput[FruitsSortEnum] | None = strawberry.UNSET,
         filters: pydantic_to_input_type(FruitFilterSet) | None = strawberry.UNSET,
     ) -> ListType[types.FruitType]:
-        handler = strawberry_vercajk.DjangoListResponseHandler[models.Fruit](models.Fruit.objects.all(), info)
+        handler = DjangoListResponseHandler[models.Fruit](models.Fruit.objects.all(), info)
         resp = handler.process(page=page, sort=sort, filters=filters)
         return resp
 
