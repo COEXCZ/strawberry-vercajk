@@ -3,7 +3,6 @@ import pytest
 from faker import Faker
 import dataclasses
 import typing
-import django.db.models
 import strawberry.types.scalar
 
 import strawberry_vercajk

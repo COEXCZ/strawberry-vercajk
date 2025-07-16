@@ -440,9 +440,10 @@ class Filter(FilterInterface):
 
         try:
             import django.db.models
+            from strawberry_vercajk.django.utils import check_django_field_exists
 
             if issubclass(model_cls, django.db.models.Model):
-                return base_utils.check_django_field_exists(model_cls, self.model_field)
+                return check_django_field_exists(model_cls, self.model_field)
         except ImportError:
             pass
 
