@@ -6,14 +6,27 @@ An opinionated toolkit for creating easy-to-work-with GraphQL APIs using https:/
 pip install strawberry-vercajk
 ```
 
+with django support:
+```bash
+pip install strawberry-vercajk[django]
+```
+
 ## Settings
 In your Django settings file, add the following settings:
 ```python
-from strawberry_vercajk import StrawberryVercajkSettings
+from strawberry_vercajk.core import StrawberryVercajkSettings
 
 STRAWBERRY_VERCAJK: StrawberryVercajkSettings = {
     ...
 }
+```
+
+Or if you are not using Django, you can call the following function in your app entrypoint:
+```python
+from strawberry_vercajk.core import StrawberryVercajkSettings, configure_strawberry_vercajk
+configure_strawberry_vercajk(StrawberryVercajkSettings(
+    # Your configuration here
+))
 ```
 See StrawberryVercajkSettings for configuration options.
 
