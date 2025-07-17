@@ -5,15 +5,15 @@ import django.db.models
 import strawberry
 from django.core.paginator import UnorderedObjectListWarning
 
+from strawberry_vercajk import Paginator
 from strawberry_vercajk._list.processor import BaseListRespHandler
-from strawberry_vercajk.core import Paginator
 
 if typing.TYPE_CHECKING:
-    from strawberry_vercajk.core import FilterQ, FilterSet, SortInput
+    from strawberry_vercajk import FilterQ, FilterSet, SortInput
 
 
 def get_django_filter_q(filter_q: "FilterQ", /) -> django.db.models.Q:
-    from strawberry_vercajk.core import FilterQ
+    from strawberry_vercajk import FilterQ
 
     def _evaluate_filter(fq: "FilterQ") -> django.db.models.Q:
         if fq.is_and:

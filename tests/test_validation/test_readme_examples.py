@@ -2,7 +2,7 @@ import typing
 
 import pydantic
 import strawberry
-import strawberry_vercajk.core as strawberry_vercajk
+import strawberry_vercajk
 
 
 class CompanyInputValidator(strawberry_vercajk.InputValidator):

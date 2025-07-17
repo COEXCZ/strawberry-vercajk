@@ -7,8 +7,8 @@ import strawberry
 from strawberry.schema_directive import StrawberrySchemaDirective, Location
 from strawberry.types.base import StrawberryOptional, StrawberryList
 
-import strawberry_vercajk.core as strawberry_vercajk
-from strawberry_vercajk.core import InputFactory, FieldConstraintsDirective
+import strawberry_vercajk
+from strawberry_vercajk import InputFactory, FieldConstraintsDirective
 
 
 def test_input_factory_make_input() -> None:

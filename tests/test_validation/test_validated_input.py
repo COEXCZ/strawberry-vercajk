@@ -3,7 +3,7 @@ import typing
 import pydantic
 import pytest
 
-import strawberry_vercajk.core as strawberry_vercajk
+import strawberry_vercajk
 
 
 def test_validated_input() -> None:

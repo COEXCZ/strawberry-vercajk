@@ -3,7 +3,7 @@ import enum
 import pytest
 import strawberry
 
-from strawberry_vercajk.core import pydantic_to_input_type
+from strawberry_vercajk import pydantic_to_input_type
 from strawberry_vercajk.django import DjangoListResponseHandler
 from strawberry_vercajk._list.graphql import PageInput, SortInput, ListType
 from strawberry_vercajk._list.sort import model_sort_enum

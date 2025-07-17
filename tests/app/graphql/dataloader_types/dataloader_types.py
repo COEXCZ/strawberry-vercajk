@@ -4,7 +4,7 @@ import typing
 import strawberry
 import strawberry.django
 
-from strawberry_vercajk.core import (
+from strawberry_vercajk import (
     PageInput, model_sort_enum, SortInput, model_filter, FilterSet, Filter,
     pydantic_to_input_type,
 )
