@@ -1,4 +1,3 @@
-import strawberry
 import strawberry.django
 
 import strawberry_vercajk

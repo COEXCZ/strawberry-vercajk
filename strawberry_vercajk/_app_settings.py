@@ -1,6 +1,7 @@
 __all__ = [
     "StrawberryVercajkSettings",
     "app_settings",
+    "configure_strawberry_vercajk",
 ]
 
 import typing
@@ -8,7 +9,13 @@ import typing
 import pydantic
 import pydantic_core
 import strawberry
-from django.conf import settings as django_settings
+
+try:
+    from django.conf import settings as django_settings
+
+    _global_settings = django_settings
+except ImportError:
+    _global_settings = None
 
 SETTINGS_NAME: str = "STRAWBERRY_VERCAJK"
 
@@ -43,7 +50,18 @@ class StrawberryVercajkSettings(typing.TypedDict):
     VALIDATION: typing.NotRequired[ValidationSettings]
 
 
-class AppListSettings:
+class AppSettingsMixin:
+    @property
+    def _global_settings(self) -> StrawberryVercajkSettings:
+        if _global_settings is None:
+            raise RuntimeError(
+                "Strawberry vercajk settings are not configured. "
+                "Please call `configure_strawberry_vercajk(settings)` before using the app.",
+            )
+        return getattr(_global_settings, SETTINGS_NAME, {})
+
+
+class AppListSettings(AppSettingsMixin):
     @property
     def MAX_PAGE_SIZE(self) -> int:  # noqa: N802
         return self._settings.get("MAX_PAGE_SIZE", 100)
@@ -53,15 +71,11 @@ class AppListSettings:
         return self._settings.get("DEFAULT_PAGE_SIZE", 10)
 
     @property
-    def _global_settings(self) -> StrawberryVercajkSettings:
-        return getattr(django_settings, SETTINGS_NAME, {})
-
-    @property
     def _settings(self) -> ListSettings:
         return self._global_settings.get("LIST", {})
 
 
-class AppIDHasherSettings:
+class AppIDHasherSettings(AppSettingsMixin):
     @property
     def ALPHABET(self) -> str:  # noqa: N802
         return self._settings.get("ALPHABET", "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -71,15 +85,11 @@ class AppIDHasherSettings:
         return self._settings.get("MIN_LENGTH", 5)
 
     @property
-    def _global_settings(self) -> StrawberryVercajkSettings:
-        return getattr(django_settings, SETTINGS_NAME, {})
-
-    @property
     def _settings(self) -> IDHasherSettings:
         return self._global_settings.get("ID_HASHER", {})
 
 
-class AppValidationSettings:
+class AppValidationSettings(AppSettingsMixin):
     @property
     def PYDANTIC_TO_GQL_INPUT_TYPE(self) -> dict[type, type]:  # noqa: N802
         from strawberry_vercajk import HashedID
@@ -104,18 +114,14 @@ class AppValidationSettings:
         return self._settings.get("PYDANTIC_FIELD_TO_GQL_INPUT_TYPE_EXCLUDE_DEFAULTS", False)
 
     @property
-    def _global_settings(self) -> StrawberryVercajkSettings:
-        return getattr(django_settings, SETTINGS_NAME, {})
-
-    @property
     def _settings(self) -> ValidationSettings:
         return self._global_settings.get("VALIDATION", {})
 
 
-class AppSettings:
+class AppSettings(AppSettingsMixin):
     @property
     def _settings(self) -> StrawberryVercajkSettings:
-        return getattr(django_settings, SETTINGS_NAME, {})
+        return self._global_settings
 
     @property
     def LIST(self) -> AppListSettings:  # noqa: N802
@@ -131,3 +137,13 @@ class AppSettings:
 
 
 app_settings = AppSettings()
+
+
+def configure_strawberry_vercajk(
+    settings: StrawberryVercajkSettings,
+) -> None:
+    """
+    Configure the Strawberry vercajk app with the given settings.
+    """
+    global _global_settings  # noqa: PLW0603
+    _global_settings = {SETTINGS_NAME: settings}

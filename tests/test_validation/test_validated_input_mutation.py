@@ -5,7 +5,6 @@ import typing
 
 import pydantic
 import pydantic_core
-import strawberry
 import strawberry.extensions
 
 import strawberry_vercajk

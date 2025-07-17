@@ -32,8 +32,10 @@ def model_sort_enum[T: "enum.StrEnum"](
             try:
                 import django.db.models
 
+                from strawberry_vercajk.django.utils import check_django_field_exists
+
                 if issubclass(model, django.db.models.Model):
-                    return base_utils.check_django_field_exists(model, sort_value)
+                    return check_django_field_exists(model, sort_value)
             except ImportError:
                 pass
 

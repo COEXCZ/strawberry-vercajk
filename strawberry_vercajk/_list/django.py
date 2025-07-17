@@ -1,8 +1,11 @@
 import typing
+import warnings
 
 import django.db.models
 import strawberry
+from django.core.paginator import UnorderedObjectListWarning
 
+from strawberry_vercajk import Paginator
 from strawberry_vercajk._list.processor import BaseListRespHandler
 
 if typing.TYPE_CHECKING:
@@ -41,7 +44,40 @@ def get_django_order_by(sort: "SortInput", /) -> list[django.db.models.OrderBy]:
     return s
 
 
+class DjangoModelPaginator[T: "django.db.models.Model"](Paginator):
+    object_list: django.db.models.QuerySet[T]
+
+    def __init__(
+        self,
+        object_list: list[T],
+        per_page: int,
+        orphans: int = 0,
+        allow_empty_first_page: bool = True,
+    ) -> None:
+        super().__init__(object_list, per_page, orphans, allow_empty_first_page)
+        self._check_object_list_is_ordered()
+
+    def _check_object_list_is_ordered(self) -> None:
+        """
+        Warn if self.object_list is unordered (typically a QuerySet).
+        """
+        ordered = getattr(self.object_list, "ordered", None)
+        if ordered is not None and not ordered:
+            obj_list_repr = (
+                f"{self.object_list.model} {self.object_list.__class__.__name__}"
+                if hasattr(self.object_list, "model")
+                else f"{self.object_list!r}"
+            )
+            warnings.warn(
+                f"Pagination may yield inconsistent results with an unordered object_list: {obj_list_repr}.",
+                UnorderedObjectListWarning,
+                stacklevel=3,
+            )
+
+
 class DjangoListResponseHandler[T: "django.db.models.Model"](BaseListRespHandler[T]):
+    paginator_cls = DjangoModelPaginator
+
     @typing.override
     def apply_sorting(
         self,

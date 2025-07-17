@@ -1,13 +1,11 @@
-from ._app_settings import StrawberryVercajkSettings
+from strawberry_vercajk._app_settings import StrawberryVercajkSettings, configure_strawberry_vercajk
 
-from ._base.query_logger import QueryLogger
+from strawberry_vercajk._dataloaders.core import InfoDataloadersContextMixin, BaseDataLoader
+from strawberry_vercajk._dataloaders.pk_dataloader import PKDataLoader
+from strawberry_vercajk._dataloaders.fk_dataloader import FKDataLoader
+from strawberry_vercajk._dataloaders.fk_list_dataloader import FKListDataLoader, FKListDataLoaderFn
 
-from ._dataloaders.core import InfoDataloadersContextMixin, BaseDataLoader
-from ._dataloaders.pk_dataloader import PKDataLoader
-from ._dataloaders.fk_dataloader import FKDataLoader
-from ._dataloaders.fk_list_dataloader import FKListDataLoader, FKListDataLoaderFn
-
-from ._id_hasher import (
+from strawberry_vercajk._id_hasher import (
     HashID,
     HashIDUnion,
     hash_id_register,
@@ -17,8 +15,8 @@ from ._id_hasher import (
     HashedID,
 )
 
-from ._list.filter import FilterSet, Filter, FilterQ, model_filter
-from ._list.graphql import (
+from strawberry_vercajk._list.filter import FilterSet, Filter, FilterQ, model_filter
+from strawberry_vercajk._list.graphql import (
     PageInnerMetadataType,
     PageMetadataType,
     ListType,
@@ -28,12 +26,11 @@ from ._list.graphql import (
     SortFieldInput,
     SortInput,
 )
-from ._list.page import Paginator, Page
-from ._list.processor import BaseListRespHandler
-from ._list.sort import OrderingDirection, OrderingNullsPosition, model_sort_enum
-from ._list.django import DjangoListResponseHandler
+from strawberry_vercajk._list.page import Paginator, Page
+from strawberry_vercajk._list.processor import BaseListRespHandler
+from strawberry_vercajk._list.sort import OrderingDirection, OrderingNullsPosition, model_sort_enum
 
-from ._validation.gql_types import (
+from strawberry_vercajk._validation.gql_types import (
     ErrorInterface,
     ErrorType,
     ErrorConstraintType,
@@ -42,8 +39,8 @@ from ._validation.gql_types import (
     MutationErrorType,
     ConstraintDataType,
 )
-from ._validation.directives import FieldConstraintsDirective
-from ._validation.input_factory import InputFactory, GqlTypeAnnot
-from ._validation.validator import ValidatedInput, InputValidator, pydantic_to_input_type, build_errors, set_gql_params
+from strawberry_vercajk._validation.directives import FieldConstraintsDirective
+from strawberry_vercajk._validation.input_factory import InputFactory, GqlTypeAnnot
+from strawberry_vercajk._validation.validator import ValidatedInput, InputValidator, pydantic_to_input_type, build_errors, set_gql_params
 
-from ._scalars import IntStr
+from strawberry_vercajk._scalars import IntStr

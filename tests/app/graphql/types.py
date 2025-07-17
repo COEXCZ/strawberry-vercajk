@@ -2,7 +2,6 @@ import enum
 import typing
 
 import pydantic
-import strawberry
 import strawberry.django
 
 __all__ = [
