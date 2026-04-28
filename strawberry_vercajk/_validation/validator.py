@@ -36,22 +36,21 @@ def validation_context(value: dict[str, typing.Any]) -> typing.Iterator[None]:
 
 def set_gql_params[V](
     *,
-    name: str,
+    name: str | None = None,
+    is_partial: bool = False,
 ) -> typing.Callable[[type[V]], type[V]]:
     """
     Decorator to set gql params on the input type, used when converting pydantic validators to strawberry input types
     via `pydantic_to_input_type` (or `InputFactory.make`).
     :param name: The name of the gql type.
-
-    Example:
-        >>> @set_gql_params(name="CustomerCreateInput")
-        ... class CustomerCreateWithAddressInput(ValidatedInput):
-        ...     ...
-
+    :param is_partial: When True, non-required fields use UNSET defaults so that
+        `model_dump(exclude_unset=True)` works correctly (PATCH semantics).
     """
 
     def wrapper(validator: type[V]) -> type[V]:
-        setattr(validator, constants.INPUT_VALIDATOR_GQL_NAME, name)
+        if name is not None:
+            setattr(validator, constants.INPUT_VALIDATOR_GQL_NAME, name)
+        setattr(validator, constants.INPUT_IS_PARTIAL, is_partial)
         return validator
 
     return wrapper

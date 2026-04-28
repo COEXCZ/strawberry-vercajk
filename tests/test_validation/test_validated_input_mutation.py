@@ -152,20 +152,6 @@ class MutationInputValidator(strawberry_vercajk.InputValidator):
 MutationInputGql = strawberry_vercajk.pydantic_to_input_type(MutationInputValidator)
 
 
-class PatchInputValidator(strawberry_vercajk.InputValidator):
-    name: str
-    nickname: str = "default_nick"
-
-
-PatchInputGql = strawberry_vercajk.pydantic_to_input_type(PatchInputValidator)
-
-
-@strawberry.type
-class PatchResponse:
-    full: strawberry.scalars.JSON
-    exclude_unset: strawberry.scalars.JSON
-
-
 class UserCreateInputValidator(strawberry_vercajk.InputValidator):
     username: typing.Annotated[str, pydantic.Field(max_length=20)]
 
@@ -184,22 +170,6 @@ class Mutation:
         if errors:
             return strawberry_vercajk.MutationErrorType(errors=errors)
         return OkResponse(ok=True)
-
-    @strawberry.mutation
-    def patch_update(
-            self,
-            input: PatchInputGql,
-    ) -> typing.Annotated[
-        strawberry_vercajk.MutationErrorType | PatchResponse,
-        strawberry.union(name="PatchUpdateResponse")
-    ]:
-        errors = input.clean()
-        if errors:
-            return strawberry_vercajk.MutationErrorType(errors=errors)
-        return PatchResponse(
-            full=input.clean_data.model_dump(),
-            exclude_unset=input.clean_data.model_dump(exclude_unset=True),
-        )
 
     @strawberry.mutation
     def user_create(
@@ -547,6 +517,54 @@ def test_user_create_invalid() -> None:
     assert resp.data["userCreate"]["errors"][0]["constraints"] == [{"code": "MAX_LENGTH", "value": "20", "dataType": "INTEGER"}]
 
 
+def _build_patch_schema():
+    class PatchInputBaseValidator(strawberry_vercajk.InputValidator):
+        name: str
+        nickname: str = "default_nick"
+        status: SomeEnum = SomeEnum.VALUE1
+
+    @strawberry_vercajk.set_gql_params(is_partial=True)
+    class PatchInputValidator(PatchInputBaseValidator):
+        pass
+
+    PatchInputGql = strawberry_vercajk.ValidatedInput[PatchInputValidator]
+
+    @strawberry.type
+    class PatchResponse:
+        full: strawberry.scalars.JSON
+        exclude_unset: strawberry.scalars.JSON
+
+    @strawberry.type
+    class PatchQuery:
+        @strawberry.field()
+        def noop(self) -> str:
+            return "noop"
+
+    @strawberry.type
+    class PatchMutation:
+        @strawberry.mutation
+        def patch_update(
+            self,
+            input: PatchInputGql,
+        ) -> typing.Annotated[
+            strawberry_vercajk.MutationErrorType | PatchResponse,
+            strawberry.union(name="PatchUpdateResponse")
+        ]:
+            errors = input.clean()
+            if errors:
+                return strawberry_vercajk.MutationErrorType(errors=errors)
+            return PatchResponse(
+                full=input.clean_data.model_dump(),
+                exclude_unset=input.clean_data.model_dump(exclude_unset=True),
+            )
+
+    return strawberry.Schema(
+        query=PatchQuery,
+        mutation=PatchMutation,
+        types={strawberry_vercajk.ErrorType},
+    )
+
+
 PATCH_UPDATE_MUTATION: str = """
     mutation patchUpdate($input: PatchInput!) {
         patchUpdate(input: $input) {
@@ -574,7 +592,8 @@ PATCH_UPDATE_MUTATION: str = """
 
 
 def test_patch_exclude_unset() -> None:
-    resp = test_schema.execute_sync(
+    patch_schema = _build_patch_schema()
+    resp = patch_schema.execute_sync(
         query=PATCH_UPDATE_MUTATION,
         variable_values={
             "input": {
@@ -584,5 +603,51 @@ def test_patch_exclude_unset() -> None:
     )
     assert resp.errors is None
     assert resp.data["patchUpdate"]["__typename"] == "PatchResponse"
-    assert resp.data["patchUpdate"]["full"] == {"name": "John", "nickname": "default_nick"}
+    assert resp.data["patchUpdate"]["full"] == {"name": "John", "nickname": "default_nick", "status": SomeEnum.VALUE1}
     assert resp.data["patchUpdate"]["excludeUnset"] == {"name": "John"}
+
+
+INTROSPECTION_QUERY: str = """
+    {
+        __type(name: "PatchInput") {
+            inputFields {
+                name
+                defaultValue
+                type {
+                    kind
+                    name
+                    ofType {
+                        kind
+                        name
+                    }
+                }
+            }
+        }
+    }
+"""
+
+
+def test_patch_input_schema_has_no_defaults() -> None:
+    patch_schema = _build_patch_schema()
+    resp = patch_schema.execute_sync(query=INTROSPECTION_QUERY)
+    assert resp.errors is None
+    fields = {f["name"]: f for f in resp.data["__type"]["inputFields"]}
+    assert fields["name"]["defaultValue"] is None
+    assert fields["nickname"]["defaultValue"] is None
+    assert fields["status"]["defaultValue"] is None
+
+
+def test_patch_input_schema_non_optional_fields_become_nullable() -> None:
+    """Fields with defaults that are non-optional in pydantic (e.g. `status: SomeEnum = SomeEnum.VALUE1`)
+    must become nullable in the GraphQL schema when is_partial=True, otherwise they'd be required."""
+    patch_schema = _build_patch_schema()
+    resp = patch_schema.execute_sync(query=INTROSPECTION_QUERY)
+    assert resp.errors is None
+    fields = {f["name"]: f["type"] for f in resp.data["__type"]["inputFields"]}
+    # name: str (required) -> stays NON_NULL
+    assert fields["name"]["kind"] == "NON_NULL"
+    # nickname: str = "default_nick" -> already nullable (str with default becomes Optional[str])
+    assert fields["nickname"]["kind"] != "NON_NULL"
+    # status: SomeEnum = SomeEnum.VALUE1 -> must be nullable in partial mode
+    assert fields["status"]["kind"] != "NON_NULL"
+    assert fields["status"]["name"] == "SomeEnum"

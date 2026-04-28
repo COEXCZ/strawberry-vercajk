@@ -55,7 +55,7 @@ class InputFactory:
     _REGISTRY: typing.ClassVar[dict[type["pydantic.BaseModel"], type["ValidatedInput"]]] = {}
 
     @classmethod
-    def make[T: pydantic.BaseModel](
+    def make[T: pydantic.BaseModel](  # noqa: C901
         cls,
         input_validator: type[T],
         *,
@@ -75,6 +75,8 @@ class InputFactory:
                 name = getattr(input_validator, constants.INPUT_VALIDATOR_GQL_NAME)
             else:
                 name = typing.cast("typing.LiteralString", input_validator.__name__.removesuffix("Validator"))
+
+        is_partial = getattr(input_validator, constants.INPUT_IS_PARTIAL, False)
 
         fields = input_validator.__pydantic_fields__.copy()
         for field_info in fields.values():
@@ -128,7 +130,8 @@ class InputFactory:
             strawberry.experimental.pydantic.input(input_validator, name=name)(input_cls),
         )
 
-        cls._enable_provided_field_tracking(gql_input, fields)
+        if is_partial:
+            cls._apply_partial_input_mode(gql_input, fields)
 
         gql_input.to_pydantic = cls.to_pydantic
         setattr(gql_input, constants.INPUT_VALIDATOR_ATTR_NAME, input_validator)
@@ -296,7 +299,7 @@ class InputFactory:
         )
 
     @classmethod
-    def _enable_provided_field_tracking(
+    def _apply_partial_input_mode(
         cls,
         gql_input: type["ValidatedInput"],
         fields: dict[str, "pydantic.fields.FieldInfo"],
@@ -310,15 +313,21 @@ class InputFactory:
 
         This method fixes that in two steps:
         1. Clear GraphQL-level defaults (on `__strawberry_definition__`) for non-required fields
-           so that graphql-core does not fill them in when the client omits them.
+           and make them nullable so that graphql-core does not fill them in when the client
+           omits them.
         2. Wrap `__init__` to record which kwargs were actually passed, stored as a frozenset
            on each instance. `to_pydantic` later uses this to pass only the provided fields
            to the pydantic constructor.
         """
+        from strawberry.types.base import StrawberryOptional
+
         name__strawberry_field = {f.name: f for f in gql_input.__strawberry_definition__.fields}
         for field_name, field_info in fields.items():
             if not field_info.is_required() and field_name in name__strawberry_field:
-                name__strawberry_field[field_name].default_value = strawberry.UNSET
+                strawberry_field = name__strawberry_field[field_name]
+                strawberry_field.default_value = strawberry.UNSET
+                if not isinstance(strawberry_field.type, StrawberryOptional):
+                    strawberry_field.type = StrawberryOptional(strawberry_field.type)
 
         original_init = gql_input.__init__
 

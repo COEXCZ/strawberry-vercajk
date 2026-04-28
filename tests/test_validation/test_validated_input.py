@@ -286,11 +286,15 @@ def test_validator_via_class_getitem() -> None:
 
 
 def test_model_dump_exclude_unset() -> None:
-    class Model(pydantic.BaseModel):
+    class CreateValidator(strawberry_vercajk.InputValidator):
         name: str
         nickname: str = "default_nick"
 
-    input_type = strawberry_vercajk.ValidatedInput[Model]
+    @strawberry_vercajk.set_gql_params(is_partial=True)
+    class PatchValidator(CreateValidator):
+        pass
+
+    input_type = strawberry_vercajk.ValidatedInput[PatchValidator]
     input_data = input_type(name="John")
     errors = input_data.clean()
     assert errors == []
@@ -299,11 +303,15 @@ def test_model_dump_exclude_unset() -> None:
 
 
 def test_model_dump_exclude_unset_with_explicit_default_value() -> None:
-    class Model(pydantic.BaseModel):
+    class CreateValidator(strawberry_vercajk.InputValidator):
         name: str
         nickname: str = "default_nick"
 
-    input_type = strawberry_vercajk.ValidatedInput[Model]
+    @strawberry_vercajk.set_gql_params(is_partial=True)
+    class PatchValidator(CreateValidator):
+        pass
+
+    input_type = strawberry_vercajk.ValidatedInput[PatchValidator]
     input_data = input_type(name="John", nickname="default_nick")
     errors = input_data.clean()
     assert errors == []
@@ -312,15 +320,42 @@ def test_model_dump_exclude_unset_with_explicit_default_value() -> None:
 
 
 def test_model_dump_exclude_unset_with_none_default() -> None:
-    class Model(pydantic.BaseModel):
+    class CreateValidator(strawberry_vercajk.InputValidator):
         name: str
         nickname: str | None = None
 
-    input_type = strawberry_vercajk.ValidatedInput[Model]
+    @strawberry_vercajk.set_gql_params(is_partial=True)
+    class PatchValidator(CreateValidator):
+        pass
+
+    input_type = strawberry_vercajk.ValidatedInput[PatchValidator]
     input_data = input_type(name="John")
     errors = input_data.clean()
     assert errors == []
     assert input_data.clean_data.model_dump() == {"name": "John", "nickname": None}
+    assert input_data.clean_data.model_dump(exclude_unset=True) == {"name": "John"}
+
+
+def test_model_dump_exclude_unset_with_enum_default() -> None:
+    import enum
+
+    class Color(enum.Enum):
+        RED = "RED"
+        BLUE = "BLUE"
+
+    class CreateValidator(strawberry_vercajk.InputValidator):
+        name: str
+        color: Color = Color.RED
+
+    @strawberry_vercajk.set_gql_params(is_partial=True)
+    class PatchValidator(CreateValidator):
+        pass
+
+    input_type = strawberry_vercajk.ValidatedInput[PatchValidator]
+    input_data = input_type(name="John")
+    errors = input_data.clean()
+    assert errors == []
+    assert input_data.clean_data.model_dump() == {"name": "John", "color": Color.RED}
     assert input_data.clean_data.model_dump(exclude_unset=True) == {"name": "John"}
 
 
