@@ -285,6 +285,45 @@ def test_validator_via_class_getitem() -> None:
     assert input_data.clean_data.b == 2
 
 
+def test_model_dump_exclude_unset() -> None:
+    class Model(pydantic.BaseModel):
+        name: str
+        nickname: str = "default_nick"
+
+    input_type = strawberry_vercajk.ValidatedInput[Model]
+    input_data = input_type(name="John")
+    errors = input_data.clean()
+    assert errors == []
+    assert input_data.clean_data.model_dump() == {"name": "John", "nickname": "default_nick"}
+    assert input_data.clean_data.model_dump(exclude_unset=True) == {"name": "John"}
+
+
+def test_model_dump_exclude_unset_with_explicit_default_value() -> None:
+    class Model(pydantic.BaseModel):
+        name: str
+        nickname: str = "default_nick"
+
+    input_type = strawberry_vercajk.ValidatedInput[Model]
+    input_data = input_type(name="John", nickname="default_nick")
+    errors = input_data.clean()
+    assert errors == []
+    assert input_data.clean_data.model_dump() == {"name": "John", "nickname": "default_nick"}
+    assert input_data.clean_data.model_dump(exclude_unset=True) == {"name": "John", "nickname": "default_nick"}
+
+
+def test_model_dump_exclude_unset_with_none_default() -> None:
+    class Model(pydantic.BaseModel):
+        name: str
+        nickname: str | None = None
+
+    input_type = strawberry_vercajk.ValidatedInput[Model]
+    input_data = input_type(name="John")
+    errors = input_data.clean()
+    assert errors == []
+    assert input_data.clean_data.model_dump() == {"name": "John", "nickname": None}
+    assert input_data.clean_data.model_dump(exclude_unset=True) == {"name": "John"}
+
+
 def test_set_gql_params_gql_name() -> None:
     @strawberry_vercajk.set_gql_params(name="SomeName")
     class Model(pydantic.BaseModel):

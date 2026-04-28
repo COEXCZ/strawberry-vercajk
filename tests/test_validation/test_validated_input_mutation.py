@@ -151,6 +151,21 @@ class MutationInputValidator(strawberry_vercajk.InputValidator):
 
 MutationInputGql = strawberry_vercajk.pydantic_to_input_type(MutationInputValidator)
 
+
+class PatchInputValidator(strawberry_vercajk.InputValidator):
+    name: str
+    nickname: str = "default_nick"
+
+
+PatchInputGql = strawberry_vercajk.pydantic_to_input_type(PatchInputValidator)
+
+
+@strawberry.type
+class PatchResponse:
+    full: strawberry.scalars.JSON
+    exclude_unset: strawberry.scalars.JSON
+
+
 class UserCreateInputValidator(strawberry_vercajk.InputValidator):
     username: typing.Annotated[str, pydantic.Field(max_length=20)]
 
@@ -169,6 +184,22 @@ class Mutation:
         if errors:
             return strawberry_vercajk.MutationErrorType(errors=errors)
         return OkResponse(ok=True)
+
+    @strawberry.mutation
+    def patch_update(
+            self,
+            input: PatchInputGql,
+    ) -> typing.Annotated[
+        strawberry_vercajk.MutationErrorType | PatchResponse,
+        strawberry.union(name="PatchUpdateResponse")
+    ]:
+        errors = input.clean()
+        if errors:
+            return strawberry_vercajk.MutationErrorType(errors=errors)
+        return PatchResponse(
+            full=input.clean_data.model_dump(),
+            exclude_unset=input.clean_data.model_dump(exclude_unset=True),
+        )
 
     @strawberry.mutation
     def user_create(
@@ -514,3 +545,44 @@ def test_user_create_invalid() -> None:
     assert resp.data["userCreate"]["errors"][0]["message"] == "String should have at most 20 characters"
     assert resp.data["userCreate"]["errors"][0]["location"] == ["username"]
     assert resp.data["userCreate"]["errors"][0]["constraints"] == [{"code": "MAX_LENGTH", "value": "20", "dataType": "INTEGER"}]
+
+
+PATCH_UPDATE_MUTATION: str = """
+    mutation patchUpdate($input: PatchInput!) {
+        patchUpdate(input: $input) {
+            ... on PatchResponse {
+                __typename
+                full
+                excludeUnset
+            }
+            ... on MutationError {
+                __typename
+                errors {
+                    location
+                    code
+                    message
+                    constraints {
+                        code
+                        value
+                        dataType
+                    }
+                }
+            }
+        }
+    }
+"""
+
+
+def test_patch_exclude_unset() -> None:
+    resp = test_schema.execute_sync(
+        query=PATCH_UPDATE_MUTATION,
+        variable_values={
+            "input": {
+                "name": "John",
+            },
+        },
+    )
+    assert resp.errors is None
+    assert resp.data["patchUpdate"]["__typename"] == "PatchResponse"
+    assert resp.data["patchUpdate"]["full"] == {"name": "John", "nickname": "default_nick"}
+    assert resp.data["patchUpdate"]["excludeUnset"] == {"name": "John"}
