@@ -394,11 +394,11 @@ def test_input_factory_with_annotated_nested_validator_field_required() -> None:
     definition = gql_input.__strawberry_definition__
     assert len(definition.fields) == 1
     assert definition.fields[0].name == "nested"
-    assert len(definition.fields[0].type_annotation.annotation._type_definition.fields) == 2
-    assert definition.fields[0].type_annotation.annotation._type_definition.fields[0].name == "something"
-    assert definition.fields[0].type_annotation.annotation._type_definition.fields[1].name == "num"
-    assert definition.fields[0].type_annotation.annotation._type_definition.fields[0].type_annotation.annotation is str
-    assert definition.fields[0].type_annotation.annotation._type_definition.fields[1].type_annotation.annotation is int
+    assert len(definition.fields[0].type_annotation.annotation.__strawberry_definition__.fields) == 2
+    assert definition.fields[0].type_annotation.annotation.__strawberry_definition__.fields[0].name == "something"
+    assert definition.fields[0].type_annotation.annotation.__strawberry_definition__.fields[1].name == "num"
+    assert definition.fields[0].type_annotation.annotation.__strawberry_definition__.fields[0].type_annotation.annotation is str
+    assert definition.fields[0].type_annotation.annotation.__strawberry_definition__.fields[1].type_annotation.annotation is int
 
 def test_input_factory_with_annotated_nested_validator_field_not_required_with_default() -> None:
     class NestedValidator(pydantic.BaseModel):
