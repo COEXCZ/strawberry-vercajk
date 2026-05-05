@@ -63,6 +63,7 @@ class ValidatedInput[CleanDataType: "pydantic.BaseModel"]:
     __clean_data: CleanDataType | None = UNSET
     __errors: list["gql_types.ErrorInterface"] = UNSET
     __original_error: pydantic.ValidationError | None = UNSET
+    __provided_field_names: frozenset[str] = UNSET
     __strawberry_definition__: typing.ClassVar["strawberry.types.base.StrawberryObjectDefinition"]
     # _pydantic_type: type[CleanDataType]  # set by strawberry - use `get_validator` method instead
 
@@ -73,13 +74,21 @@ class ValidatedInput[CleanDataType: "pydantic.BaseModel"]:
         @functools.wraps(original_init)
         def tracking_init(self: "ValidatedInput", **kwargs: typing.Any) -> None:  # noqa: ANN401
             original_init(self, **kwargs)
-            object.__setattr__(self, constants.INPUT_PROVIDED_FIELD_NAMES, frozenset(kwargs))
+            self.provided_field_names = frozenset(kwargs)
 
         cls.__init__ = tracking_init
 
     @property
     def provided_field_names(self) -> frozenset[str]:
-        return getattr(self, constants.INPUT_PROVIDED_FIELD_NAMES)
+        if self.__provided_field_names is UNSET:
+            raise ValueError("You must call `install_tracking_init` before accessing `provided_field_names`.")
+        return self.__provided_field_names
+
+    @provided_field_names.setter
+    def provided_field_names(self, value: frozenset[str]) -> None:
+        if self.__provided_field_names is not UNSET:
+            raise AttributeError("Cannot re-set provided_field_names attribute - it is read-only.")
+        self.__provided_field_names = value
 
     @classmethod
     def __class_getitem__(cls, item: type[CleanDataType] | typing.TypeVar) -> type["ValidatedInput[CleanDataType]"]:
