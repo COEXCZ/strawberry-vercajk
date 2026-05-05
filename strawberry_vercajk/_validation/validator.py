@@ -8,6 +8,7 @@ __all__ = [
 ]
 import contextlib
 import contextvars
+import functools
 import logging
 import typing
 import warnings
@@ -64,6 +65,21 @@ class ValidatedInput[CleanDataType: "pydantic.BaseModel"]:
     __original_error: pydantic.ValidationError | None = UNSET
     __strawberry_definition__: typing.ClassVar["strawberry.types.base.StrawberryObjectDefinition"]
     # _pydantic_type: type[CleanDataType]  # set by strawberry - use `get_validator` method instead
+
+    @classmethod
+    def install_tracking_init(cls) -> None:
+        original_init = cls.__init__
+
+        @functools.wraps(original_init)
+        def tracking_init(self: "ValidatedInput", **kwargs: typing.Any) -> None:  # noqa: ANN401
+            original_init(self, **kwargs)
+            object.__setattr__(self, constants.INPUT_PROVIDED_FIELD_NAMES, frozenset(kwargs))
+
+        cls.__init__ = tracking_init
+
+    @property
+    def provided_field_names(self) -> frozenset[str]:
+        return getattr(self, constants.INPUT_PROVIDED_FIELD_NAMES)
 
     @classmethod
     def __class_getitem__(cls, item: type[CleanDataType] | typing.TypeVar) -> type["ValidatedInput[CleanDataType]"]:

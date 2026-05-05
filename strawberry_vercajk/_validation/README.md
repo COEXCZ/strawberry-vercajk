@@ -194,7 +194,9 @@ class UserPatchValidator(UserCreateValidator):
 
 The base validator (`UserCreateValidator`) produces a standard input where all defaults are visible in the schema 
 and filled in by GraphQL when omitted. The partial subclass (`UserPatchValidator`) produces an input where 
-fields with defaults become optional and are **not** filled in by GraphQL when omitted.
+fields with defaults become optional and are **not** filled in by GraphQL when omitted — 
+instead, they are filled later by pydantic's own defaults, which correctly marks them as unset 
+and makes `model_dump(exclude_unset=True)` work.
 
 This means you can use `model_dump(exclude_unset=True)` on the validated data to get only the fields 
 the client actually provided:

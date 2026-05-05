@@ -2,8 +2,6 @@ __all__ = [
     "GqlTypeAnnot",
     "InputFactory",
 ]
-import dataclasses
-import functools
 import types
 import typing
 
@@ -133,6 +131,7 @@ class InputFactory:
         if is_partial:
             cls._apply_partial_input_mode(gql_input, fields)
 
+        gql_input.install_tracking_init()
         gql_input.to_pydantic = cls.to_pydantic
         setattr(gql_input, constants.INPUT_VALIDATOR_ATTR_NAME, input_validator)
         cls._REGISTRY[input_validator] = gql_input
@@ -311,13 +310,10 @@ class InputFactory:
         defaults. When these are passed to the pydantic constructor, pydantic considers every field
         as explicitly set -> so `exclude_unset=True` has no effect.
 
-        This method fixes that in two steps:
-        1. Clear GraphQL-level defaults (on `__strawberry_definition__`) for non-required fields
-           and make them nullable so that graphql-core does not fill them in when the client
-           omits them.
-        2. Wrap `__init__` to record which kwargs were actually passed, stored as a frozenset
-           on each instance. `to_pydantic` later uses this to pass only the provided fields
-           to the pydantic constructor.
+        This method clears GraphQL-level defaults (on `__strawberry_definition__`) for non-required
+        fields and makes them nullable so that graphql-core does not fill them in when the client
+        omits them. Combined with `ValidatedInput.install_tracking_init`, only kwargs explicitly
+        passed to `__init__` are forwarded to the pydantic constructor.
         """
         from strawberry.types.base import StrawberryOptional
 
@@ -328,15 +324,6 @@ class InputFactory:
                 strawberry_field.default_value = strawberry.UNSET
                 if not isinstance(strawberry_field.type, StrawberryOptional):
                     strawberry_field.type = StrawberryOptional(strawberry_field.type)
-
-        original_init = gql_input.__init__
-
-        @functools.wraps(original_init)
-        def tracking_init(self: "ValidatedInput", **kwargs: typing.Any) -> None:  # noqa: ANN401
-            original_init(self, **kwargs)
-            setattr(self, constants.INPUT_PROVIDED_FIELD_NAMES, frozenset(kwargs))
-
-        gql_input.__init__ = tracking_init
 
     @staticmethod
     def to_pydantic(
@@ -354,11 +341,9 @@ class InputFactory:
         dictionaries and then insert this dictionary into the parent (outermost) pydantic object.
         This way, pydantic validates the whole object at once, and we get all validation errors.
         """
-        provided: frozenset[str] | None = getattr(self, constants.INPUT_PROVIDED_FIELD_NAMES, None)
-        if provided is None:
-            provided = frozenset(f.name for f in dataclasses.fields(self))
-
-        instance_kwargs = {name: convert_strawberry_class_to_pydantic_model(getattr(self, name)) for name in provided}
+        instance_kwargs = {
+            name: convert_strawberry_class_to_pydantic_model(getattr(self, name)) for name in self.provided_field_names
+        }
         instance_kwargs.update(kwargs)
         if not is_inner:
             return self.get_validator()(**instance_kwargs)
