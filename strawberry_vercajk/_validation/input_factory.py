@@ -168,7 +168,7 @@ class InputFactory:
             # Mark string fields which have a default value as not required.
             # This is just so that FE doesn't have a "special case" where they have to send an empty string
             # to these fields to indicate "empty" instead of null as everywhere else.
-            return typing.Optional[str], [pydantic.BeforeValidator(_none_to_empty_string)]  # noqa: UP007
+            return str | None, [pydantic.BeforeValidator(_none_to_empty_string)]
 
         if typing.get_origin(field_type) in [typing.Union, types.UnionType]:
             ret_types: list[type] = []
