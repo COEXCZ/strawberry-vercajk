@@ -1,9 +1,11 @@
 import typing
 
+import django.db.models
 import pytest
 
 import strawberry_vercajk
 from strawberry_vercajk._base.exceptions import ModelFieldDoesNotExistError
+from strawberry_vercajk._list.django import get_django_filter_q
 from strawberry_vercajk._list.filter import (
     model_filter, FilterSet, Filter, FilterFieldTypeNotSupportedError,
     FilterFieldNotAnInstanceError, FilterFieldLookupAmbiguousError, MissingFilterAnnotationError,
@@ -202,3 +204,63 @@ def test_filter_field_annotated_as_literal() -> None:
                 lookup="icontains",
             )
         ] = None
+
+
+def test_filterq_negation_of_and_compound_survives() -> None:
+    """Negating a compound AND expression wraps the whole subtree instead of dropping it."""
+    a = strawberry_vercajk.FilterQ(field="a", lookup="exact", value=1)
+    b = strawberry_vercajk.FilterQ(field="b", lookup="exact", value=2)
+    neg = ~(a & b)
+    assert not neg.is_noop
+    assert neg.is_not
+    assert neg.left == a & b
+
+
+def test_filterq_negation_of_or_compound_survives() -> None:
+    """Negating a compound OR expression wraps the whole subtree instead of dropping it."""
+    a = strawberry_vercajk.FilterQ(field="a", lookup="exact", value=1)
+    b = strawberry_vercajk.FilterQ(field="b", lookup="exact", value=2)
+    neg = ~(a | b)
+    assert not neg.is_noop
+    assert neg.is_not
+    assert neg.left == a | b
+
+
+def test_filterq_double_negation_of_leaf_returns_original() -> None:
+    """Double negation cancels out for a leaf: ~~a == a."""
+    a = strawberry_vercajk.FilterQ(field="a", lookup="exact", value=1)
+    assert ~~a == a
+
+
+def test_filterq_double_negation_of_compound_returns_original() -> None:
+    """Double negation cancels out for a compound: ~~(a & b) == (a & b)."""
+    a = strawberry_vercajk.FilterQ(field="a", lookup="exact", value=1)
+    b = strawberry_vercajk.FilterQ(field="b", lookup="exact", value=2)
+    assert ~~(a & b) == a & b
+
+
+def test_filterq_negation_of_noop_is_noop() -> None:
+    """Negating a no-op stays a no-op."""
+    assert (~strawberry_vercajk.FilterQ()).is_noop
+
+
+def test_get_django_filter_q_negates_leaf() -> None:
+    """Leaf negation translates to a negated Django Q (backward-compatible)."""
+    a = strawberry_vercajk.FilterQ(field="a", lookup="exact", value=1)
+    assert get_django_filter_q(~a) == ~django.db.models.Q(a__exact=1)
+
+
+def test_get_django_filter_q_negates_and_compound() -> None:
+    """Negating an AND compound translates to NOT(a AND b), not an empty NOT."""
+    a = strawberry_vercajk.FilterQ(field="a", lookup="exact", value=1)
+    b = strawberry_vercajk.FilterQ(field="b", lookup="exact", value=2)
+    expected = ~(django.db.models.Q(a__exact=1) & django.db.models.Q(b__exact=2))
+    assert get_django_filter_q(~(a & b)) == expected
+
+
+def test_get_django_filter_q_negates_or_compound() -> None:
+    """Negating an OR compound translates to NOT(a OR b), not an empty NOT."""
+    a = strawberry_vercajk.FilterQ(field="a", lookup="exact", value=1)
+    b = strawberry_vercajk.FilterQ(field="b", lookup="exact", value=2)
+    expected = ~(django.db.models.Q(a__exact=1) | django.db.models.Q(b__exact=2))
+    assert get_django_filter_q(~(a | b)) == expected

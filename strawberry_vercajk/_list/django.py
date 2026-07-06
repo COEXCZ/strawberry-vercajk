@@ -10,16 +10,13 @@ if typing.TYPE_CHECKING:
 
 
 def get_django_filter_q(filter_q: "FilterQ", /) -> django.db.models.Q:
-    from strawberry_vercajk import FilterQ
-
     def _evaluate_filter(fq: "FilterQ") -> django.db.models.Q:
         if fq.is_and:
             return _evaluate_filter(fq.left) & _evaluate_filter(fq.right)
         if fq.is_or:
             return _evaluate_filter(fq.left) | _evaluate_filter(fq.right)
         if fq.is_not:
-            q = FilterQ(field=fq.field, lookup=fq.lookup, value=fq.value)
-            return ~_evaluate_filter(q)
+            return ~_evaluate_filter(fq.left)
         if fq.is_noop:
             return django.db.models.Q()
         return django.db.models.Q(**{f"{fq.field}__{fq.lookup}": fq.value})
