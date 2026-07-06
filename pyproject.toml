@@ -97,6 +97,11 @@ ignore = [
     "TD003",  # Missing issue link on the line following this TODO
     "TD004",  # Missing colon in TODO
     "TRY003",  # avoid specifying long messages outside the exception class
+    # The following rules were newly enabled by a ruff upgrade (select = ["ALL"] auto-adopts new rules).
+    "FURB110",  # Replace ternary `if` expression with `or` operator (style, not always clearer)
+    "FURB171",  # Membership test against single-item container (style)
+    "PLC0415",  # `import` should be at top-level - we use deliberate local imports (e.g. optional django) to avoid hard deps / circular imports
+    "PYI034",  # `__new__` should return `Self` - false positive for our dataloader factory pattern
 ]
 
 [tool.ruff.lint.isort]
