@@ -463,3 +463,143 @@ def test_input_factory_with_annotated_nested_validator_field_with_another_annota
     assert len(errors) == 1
     assert errors[0].code == "something_cannot_be_pepa"
     assert errors[0].location == ["nested",]
+
+
+def _sdl_for_input(input_type: type) -> str:
+    """Build a minimal schema exposing `input_type` and return its SDL."""
+
+    @strawberry.type
+    class Query:
+        ok: bool = True
+
+    @strawberry.type
+    class Mutation:
+        @strawberry.mutation
+        def run(self, data: input_type) -> bool:  # noqa: ANN001
+            return True
+
+    return strawberry.Schema(query=Query, mutation=Mutation).as_str()
+
+
+def _resolve_leaf(strawberry_type: typing.Any) -> typing.Any:  # noqa: ANN401
+    """Unwrap StrawberryOptional/StrawberryList/LazyType down to the concrete input type."""
+    while True:
+        if isinstance(strawberry_type, (StrawberryOptional, StrawberryList)):
+            strawberry_type = strawberry_type.of_type
+        elif hasattr(strawberry_type, "resolve_type"):
+            strawberry_type = strawberry_type.resolve_type()
+        else:
+            return strawberry_type
+
+
+def test_input_factory_make_with_self_referential_list_field() -> None:
+    """
+    A model with a field typed as a list of itself produces a self-referential input type
+    instead of crashing with a RecursionError.
+    """
+    class NodeModel(pydantic.BaseModel):
+        name: str | None = None
+        children: "list[NodeModel] | None" = None
+
+    NodeModel.model_rebuild()
+
+    gql_input = InputFactory.make(NodeModel)
+    definition = gql_input.__strawberry_definition__
+    assert definition.name == "NodeModel"
+    fields = {f.name: f for f in definition.fields}
+    assert set(fields) == {"name", "children"}
+    # the `children` field resolves back to the very same input type
+    assert _resolve_leaf(fields["children"].type) is gql_input
+
+    sdl = _sdl_for_input(gql_input)
+    assert "input NodeModel {" in sdl
+    assert "children: [NodeModel!]" in sdl
+
+
+def test_input_factory_make_with_self_referential_optional_field() -> None:
+    """
+    A model with a direct (non-list) optional self-reference produces a self-referential
+    input type instead of crashing with a RecursionError.
+    """
+    class NodeModel(pydantic.BaseModel):
+        name: str | None = None
+        parent: "NodeModel | None" = None
+
+    NodeModel.model_rebuild()
+
+    gql_input = InputFactory.make(NodeModel)
+    definition = gql_input.__strawberry_definition__
+    fields = {f.name: f for f in definition.fields}
+    assert set(fields) == {"name", "parent"}
+    assert _resolve_leaf(fields["parent"].type) is gql_input
+
+    sdl = _sdl_for_input(gql_input)
+    assert "input NodeModel {" in sdl
+    assert "parent: NodeModel" in sdl
+
+
+def test_input_factory_make_with_mutual_recursion() -> None:
+    """
+    Two models that reference each other (A -> B -> A) produce mutually-referential input
+    types instead of crashing with a RecursionError.
+    """
+    class AModel(pydantic.BaseModel):
+        name: str | None = None
+        children: "list[BModel] | None" = None
+
+    class BModel(pydantic.BaseModel):
+        name: str | None = None
+        parents: "list[AModel] | None" = None
+
+    AModel.model_rebuild()
+    BModel.model_rebuild()
+
+    a_input = InputFactory.make(AModel)
+    b_input = InputFactory.make(BModel)
+    assert AModel in InputFactory._REGISTRY
+    assert BModel in InputFactory._REGISTRY
+
+    a_fields = {f.name: f for f in a_input.__strawberry_definition__.fields}
+    b_fields = {f.name: f for f in b_input.__strawberry_definition__.fields}
+    assert _resolve_leaf(a_fields["children"].type) is b_input
+    assert _resolve_leaf(b_fields["parents"].type) is a_input
+
+    sdl = _sdl_for_input(a_input)
+    assert "input AModel {" in sdl
+    assert "input BModel {" in sdl
+    assert "children: [BModel!]" in sdl
+    assert "parents: [AModel!]" in sdl
+
+
+def test_input_factory_self_referential_to_pydantic_roundtrip() -> None:
+    """
+    A self-referential input round-trips arbitrarily-nested values back into nested pydantic
+    instances via `to_pydantic()`.
+    """
+    class NodeModel(pydantic.BaseModel):
+        name: str | None = None
+        children: "list[NodeModel] | None" = None
+
+    NodeModel.model_rebuild()
+
+    gql_input = InputFactory.make(NodeModel)
+    input_data = gql_input(
+        name="root",
+        children=[
+            gql_input(name="a", children=[gql_input(name="a1", children=None)]),
+            gql_input(name="b", children=None),
+        ],
+    )
+    errors = input_data.clean()
+    assert errors == []
+    clean_data = input_data.clean_data
+    assert type(clean_data) is NodeModel
+    assert type(clean_data.children[0]) is NodeModel
+    assert type(clean_data.children[0].children[0]) is NodeModel
+    assert clean_data.model_dump() == {
+        "name": "root",
+        "children": [
+            {"name": "a", "children": [{"name": "a1", "children": None}]},
+            {"name": "b", "children": None},
+        ],
+    }
