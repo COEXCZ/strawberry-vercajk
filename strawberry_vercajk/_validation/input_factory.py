@@ -11,7 +11,7 @@ import pydantic_core
 import pydbull
 import strawberry
 from strawberry.experimental.pydantic.conversion import convert_strawberry_class_to_pydantic_model
-from strawberry.types.lazy_type import LazyType
+from strawberry.types.lazy_type import LazyType as StrawberryLazyType
 
 from strawberry_vercajk._app_settings import app_settings
 from strawberry_vercajk._validation import constants, directives
@@ -48,7 +48,7 @@ class GqlTypeAnnot:
 
 
 @dataclasses.dataclass(frozen=True)
-class _SelfReferenceLazyType(LazyType):
+class _SelfReferenceLazyType(StrawberryLazyType):
     """
     A strawberry `LazyType` used for self-referential (and mutually-recursive) input fields.
 
@@ -62,6 +62,7 @@ class _SelfReferenceLazyType(LazyType):
 
     validator: "type[pydantic.BaseModel] | None" = None
 
+    @typing.override
     def resolve_type(self) -> type:
         # By the time strawberry resolves this lazy type the validator has finished building, so
         # `make` returns the already-built input type straight from its registry cache.
@@ -74,9 +75,9 @@ class InputFactory:
     """
 
     _REGISTRY: typing.ClassVar[dict[type["pydantic.BaseModel"], type["ValidatedInput"]]] = {}
-    # Validators whose input type is currently being built. Used to detect and break self-references
-    # and mutual recursion - see `_SelfReferenceLazyType`.
     _BUILDING: typing.ClassVar[set[type["pydantic.BaseModel"]]] = set()
+    """Validators whose input type is currently being built. Used to detect and break self-references
+    and mutual recursion - see `_SelfReferenceLazyType`."""
 
     @classmethod
     def make[T: pydantic.BaseModel](
@@ -171,7 +172,7 @@ class InputFactory:
         return typing.cast("typing.LiteralString", input_validator.__name__.removesuffix("Validator"))
 
     @classmethod
-    def _lazy_self_reference(cls, input_validator: type["pydantic.BaseModel"]) -> LazyType:
+    def _lazy_self_reference(cls, input_validator: type["pydantic.BaseModel"]) -> StrawberryLazyType:
         """Build a lazy annotation pointing at the (possibly still in-progress) input type."""
         return _SelfReferenceLazyType(
             type_name=cls._get_gql_name(input_validator),

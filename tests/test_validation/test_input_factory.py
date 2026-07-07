@@ -603,3 +603,81 @@ def test_input_factory_self_referential_to_pydantic_roundtrip() -> None:
             {"name": "b", "children": None},
         ],
     }
+
+
+def test_input_factory_self_referential_nested_validation_error() -> None:
+    """
+    An invalid value on a deeply-nested node of a self-referential input surfaces an error with the
+    full nested location, proving the whole tree is validated at once (not just the root node).
+    """
+    class NodeModel(pydantic.BaseModel):
+        name: typing.Annotated[str, pydantic.Field(max_length=3)]
+        children: "list[NodeModel] | None" = None
+
+    NodeModel.model_rebuild()
+
+    gql_input = InputFactory.make(NodeModel)
+    input_data = gql_input(
+        name="ok",
+        children=[gql_input(name="way-too-long", children=None)],
+    )
+    errors = input_data.clean()
+    assert len(errors) == 1
+    assert errors[0].code == "string_too_long"
+    assert errors[0].location == ["children", 0, "name"]
+
+
+def test_input_factory_self_reference_via_validated_input() -> None:
+    """
+    The public `ValidatedInput[Model]` entry point (the one from the original bug report) builds a
+    self-referential model without crashing, and the in-progress tracking set is left clean.
+    """
+    class NodeModel(pydantic.BaseModel):
+        name: str | None = None
+        children: "list[NodeModel] | None" = None
+
+    NodeModel.model_rebuild()
+
+    input_type = strawberry_vercajk.ValidatedInput[NodeModel]
+    input_data = input_type(name="root", children=[input_type(name="leaf", children=None)])
+    errors = input_data.clean()
+    assert errors == []
+    assert type(input_data.clean_data) is NodeModel
+    assert input_data.clean_data.children[0].name == "leaf"
+    # the build finished cleanly - nothing left marked as "in progress"
+    assert NodeModel not in InputFactory._BUILDING
+
+
+def test_input_factory_make_with_three_way_mutual_recursion() -> None:
+    """
+    A three-model cycle (A -> B -> C -> A) resolves every cross-reference instead of crashing with a
+    RecursionError, proving the in-progress tracking handles cycles longer than a single hop.
+    """
+    class ANode(pydantic.BaseModel):
+        child: "list[BNode] | None" = None
+
+    class BNode(pydantic.BaseModel):
+        child: "list[CNode] | None" = None
+
+    class CNode(pydantic.BaseModel):
+        back: "list[ANode] | None" = None
+
+    ANode.model_rebuild()
+    BNode.model_rebuild()
+    CNode.model_rebuild()
+
+    a_input = InputFactory.make(ANode)
+    b_input = InputFactory.make(BNode)
+    c_input = InputFactory.make(CNode)
+
+    a_fields = {f.name: f for f in a_input.__strawberry_definition__.fields}
+    b_fields = {f.name: f for f in b_input.__strawberry_definition__.fields}
+    c_fields = {f.name: f for f in c_input.__strawberry_definition__.fields}
+    assert _resolve_leaf(a_fields["child"].type) is b_input
+    assert _resolve_leaf(b_fields["child"].type) is c_input
+    assert _resolve_leaf(c_fields["back"].type) is a_input
+
+    sdl = _sdl_for_input(a_input)
+    assert "input ANode {" in sdl
+    assert "input BNode {" in sdl
+    assert "input CNode {" in sdl
