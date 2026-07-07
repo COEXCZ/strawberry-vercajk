@@ -681,3 +681,47 @@ def test_input_factory_make_with_three_way_mutual_recursion() -> None:
     assert "input ANode {" in sdl
     assert "input BNode {" in sdl
     assert "input CNode {" in sdl
+
+
+def test_input_factory_make_with_typing_self_field() -> None:
+    """
+    A model that expresses its self-reference with `typing.Self` builds a working self-referential
+    input type and round-trips nested values.
+
+    Unlike a string forward-ref (`"list[NodeModel]"`), pydantic keeps the annotation as the `Self`
+    special form rather than substituting the model class, so this never enters the
+    `_BUILDING`/`_SelfReferenceLazyType` path - strawberry's native `strawberry.auto` resolution
+    handles it. This test locks in that the `typing.Self` spelling keeps working.
+    """
+    class NodeModel(pydantic.BaseModel):
+        name: str | None = None
+        children: "list[typing.Self] | None" = None
+
+    NodeModel.model_rebuild()
+
+    gql_input = InputFactory.make(NodeModel)
+    definition = gql_input.__strawberry_definition__
+    assert definition.name == "NodeModel"
+    fields = {f.name: f for f in definition.fields}
+    assert set(fields) == {"name", "children"}
+    # the `children` field resolves back to the very same input type
+    assert _resolve_leaf(fields["children"].type) is gql_input
+
+    sdl = _sdl_for_input(gql_input)
+    assert "input NodeModel {" in sdl
+    assert "children: [NodeModel!]" in sdl
+
+    # nested values round-trip back into nested pydantic instances
+    input_data = gql_input(
+        name="root",
+        children=[gql_input(name="leaf", children=None)],
+    )
+    errors = input_data.clean()
+    assert errors == []
+    clean_data = input_data.clean_data
+    assert type(clean_data) is NodeModel
+    assert type(clean_data.children[0]) is NodeModel
+    assert clean_data.model_dump() == {
+        "name": "root",
+        "children": [{"name": "leaf", "children": None}],
+    }
