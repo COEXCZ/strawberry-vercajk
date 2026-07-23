@@ -4,6 +4,7 @@ from decimal import Decimal
 import pydantic
 import pydantic_core
 import strawberry
+from typing_extensions import deprecated
 from strawberry.schema_directive import StrawberrySchemaDirective, Location
 from strawberry.types.base import StrawberryOptional, StrawberryList
 
@@ -463,3 +464,41 @@ def test_input_factory_with_annotated_nested_validator_field_with_another_annota
     assert len(errors) == 1
     assert errors[0].code == "something_cannot_be_pepa"
     assert errors[0].location == ["nested",]
+
+
+def test_input_factory_annotation_marker_deprecation_reason_is_a_string() -> None:
+    """A field deprecated via a `deprecated(...)` annotation marker exposes the
+    marker's message as a plain string deprecation reason.
+
+    graphql-core requires an input field's deprecation reason to be a string, so
+    the normalized message must be used rather than the raw marker object.
+    """
+    class Model(pydantic.BaseModel):
+        old_field: typing.Annotated[int | None, deprecated("use new_field instead")] = None
+
+    gql_input = InputFactory.make(Model)
+    definition = gql_input.__strawberry_definition__
+    assert definition.fields[0].name == "old_field"
+    assert definition.fields[0].deprecation_reason == "use new_field instead"
+
+    @strawberry.type
+    class Query:
+        @strawberry.field
+        def run(self, data: gql_input) -> bool:
+            return True
+
+    # Printing the schema forces graphql-core to validate the input field's
+    # deprecation reason, which raises unless it is a string.
+    schema_str = strawberry.Schema(query=Query).as_str()
+    assert "use new_field instead" in schema_str
+
+
+def test_input_factory_non_deprecated_field_has_no_deprecation_reason() -> None:
+    """A field that is not deprecated carries no deprecation reason."""
+    class Model(pydantic.BaseModel):
+        name: str
+
+    gql_input = InputFactory.make(Model)
+    definition = gql_input.__strawberry_definition__
+    assert definition.fields[0].name == "name"
+    assert definition.fields[0].deprecation_reason is None

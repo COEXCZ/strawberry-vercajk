@@ -103,11 +103,11 @@ class InputFactory:
                     directives=[
                         field_constraints_directive,
                     ],
-                    deprecation_reason=field_info.deprecated,
+                    deprecation_reason=field_info.deprecation_message,
                 )
             else:
                 strawberry_field = strawberry.field(
-                    deprecation_reason=field_info.deprecated,
+                    deprecation_reason=field_info.deprecation_message,
                 )
             input_fields.append((field_name, field_type, strawberry_field))
 
