@@ -11,6 +11,7 @@ import pydantic_core
 import pydbull
 import strawberry
 from strawberry.experimental.pydantic.conversion import convert_strawberry_class_to_pydantic_model
+from strawberry.types.lazy_type import LazyType as StrawberryLazyType
 
 from strawberry_vercajk._app_settings import app_settings
 from strawberry_vercajk._validation import constants, directives
@@ -46,12 +47,37 @@ class GqlTypeAnnot:
         self.gql_type = gql_type
 
 
+@dataclasses.dataclass(frozen=True)
+class _SelfReferenceLazyType(StrawberryLazyType):
+    """
+    A strawberry `LazyType` used for self-referential (and mutually-recursive) input fields.
+
+    When a validator has a field typed as itself - directly, in a list, or via another validator
+    that points back to it - the strawberry input type does not exist yet while its own fields are
+    being built. Instead of recursing into `InputFactory.make` (which would never terminate), such a
+    field is annotated with this lazy type. It resolves to the finished input type from
+    `InputFactory._REGISTRY` once strawberry actually needs it (e.g. at schema-build time), by which
+    point the type has been fully built and registered.
+    """
+
+    validator: "type[pydantic.BaseModel] | None" = None
+
+    @typing.override
+    def resolve_type(self) -> type:
+        # By the time strawberry resolves this lazy type the validator has finished building, so
+        # `make` returns the already-built input type straight from its registry cache.
+        return InputFactory.make(self.validator)
+
+
 class InputFactory:
     """
     Factory for creating GraphQL input type from InputValidator type
     """
 
     _REGISTRY: typing.ClassVar[dict[type["pydantic.BaseModel"], type["ValidatedInput"]]] = {}
+    _BUILDING: typing.ClassVar[set[type["pydantic.BaseModel"]]] = set()
+    """Validators whose input type is currently being built. Used to detect and break self-references
+    and mutual recursion - see `_SelfReferenceLazyType`."""
 
     @classmethod
     def make[T: pydantic.BaseModel](
@@ -70,66 +96,89 @@ class InputFactory:
             return cls._REGISTRY[input_validator]
 
         if name is None:
-            if hasattr(input_validator, constants.INPUT_VALIDATOR_GQL_NAME):
-                name = getattr(input_validator, constants.INPUT_VALIDATOR_GQL_NAME)
-            else:
-                name = typing.cast("typing.LiteralString", input_validator.__name__.removesuffix("Validator"))
+            name = cls._get_gql_name(input_validator)
 
-        fields = input_validator.__pydantic_fields__.copy()
-        for field_info in fields.values():
-            # If the field is also a pydantic model, we need to create a GraphQL input for it as well.
-            if nested_input_validator := cls.__get_input_validator(field_info.annotation):
-                cls.make(nested_input_validator)
+        # Mark this validator as "being built" so that a self-reference (or a mutually-recursive
+        # reference back to it) short-circuits to a lazy annotation instead of recursing into `make`
+        # forever. See `_SelfReferenceLazyType` and `_get_field_annotation`.
+        cls._BUILDING.add(input_validator)
+        try:
+            fields = input_validator.__pydantic_fields__.copy()
+            for field_info in fields.values():
+                # If the field is also a pydantic model, we need to create a GraphQL input for it as well.
+                # Validators that are already being built are skipped here - they are handled as lazy
+                # self-references when the field annotation is computed.
+                nested_input_validator = cls.__get_input_validator(field_info.annotation)
+                if nested_input_validator is not None and nested_input_validator not in cls._BUILDING:
+                    cls.make(nested_input_validator)
 
-        input_fields: list[tuple[str, type, strawberry.field]] = []
-        field_convertors_any: bool = False
-        for field_name, field_info in fields.items():
-            # Get the annotation type for the strawberry input field
-            field_type, field_convertors = cls._get_field_annotation(
-                field_info.annotation,
-                is_required=field_info.is_required(),
-                field_metadata=field_info.metadata,
+            input_fields: list[tuple[str, type, strawberry.field]] = []
+            field_convertors_any: bool = False
+            for field_name, field_info in fields.items():
+                # Get the annotation type for the strawberry input field
+                field_type, field_convertors = cls._get_field_annotation(
+                    field_info.annotation,
+                    is_required=field_info.is_required(),
+                    field_metadata=field_info.metadata,
+                )
+                field_convertors_any = field_convertors_any or field_convertors
+                if field_convertors:
+                    input_validator.__pydantic_fields__[field_name].metadata.extend(field_convertors)
+
+                # Extract constraints from the field so we can add them to the directive for FE to use.
+                field_constraints_directive = cls.extract_constrains(input_validator, field_info)
+
+                # Create the strawberry field
+                if field_constraints_directive:
+                    strawberry_field = strawberry.field(
+                        directives=[
+                            field_constraints_directive,
+                        ],
+                        deprecation_reason=field_info.deprecated,
+                    )
+                else:
+                    strawberry_field = strawberry.field(
+                        deprecation_reason=field_info.deprecated,
+                    )
+                input_fields.append((field_name, field_type, strawberry_field))
+
+            # If any field has a new convertor, we need to rebuild the model.
+            if field_convertors_any:
+                input_validator.model_rebuild(force=True)
+
+            # Create the strawberry input class
+            input_cls = type(
+                name,
+                (ValidatedInput,),
+                {name: value for name, annot, value in input_fields},
             )
-            field_convertors_any = field_convertors_any or field_convertors
-            if field_convertors:
-                input_validator.__pydantic_fields__[field_name].metadata.extend(field_convertors)
+            input_cls.__annotations__ = {name: annot for name, annot, value in input_fields}
+            gql_input = typing.cast(
+                "type[ValidatedInput[T]]",
+                strawberry.experimental.pydantic.input(input_validator, name=name)(input_cls),
+            )
+            gql_input.to_pydantic = cls.to_pydantic
+            setattr(gql_input, constants.INPUT_VALIDATOR_ATTR_NAME, input_validator)
+            cls._REGISTRY[input_validator] = gql_input
+            return gql_input
+        finally:
+            cls._BUILDING.discard(input_validator)
 
-            # Extract constraints from the field so we can add them to the directive for FE to use.
-            field_constraints_directive = cls.extract_constrains(input_validator, field_info)
+    @classmethod
+    def _get_gql_name(cls, input_validator: type["pydantic.BaseModel"]) -> "typing.LiteralString":
+        """Return the GraphQL type name used for the given validator."""
+        if hasattr(input_validator, constants.INPUT_VALIDATOR_GQL_NAME):
+            return getattr(input_validator, constants.INPUT_VALIDATOR_GQL_NAME)
+        return typing.cast("typing.LiteralString", input_validator.__name__.removesuffix("Validator"))
 
-            # Create the strawberry field
-            if field_constraints_directive:
-                strawberry_field = strawberry.field(
-                    directives=[
-                        field_constraints_directive,
-                    ],
-                    deprecation_reason=field_info.deprecated,
-                )
-            else:
-                strawberry_field = strawberry.field(
-                    deprecation_reason=field_info.deprecated,
-                )
-            input_fields.append((field_name, field_type, strawberry_field))
-
-        # If any field has a new convertor, we need to rebuild the model.
-        if field_convertors_any:
-            input_validator.model_rebuild(force=True)
-
-        # Create the strawberry input class
-        input_cls = type(
-            name,
-            (ValidatedInput,),
-            {name: value for name, annot, value in input_fields},
+    @classmethod
+    def _lazy_self_reference(cls, input_validator: type["pydantic.BaseModel"]) -> StrawberryLazyType:
+        """Build a lazy annotation pointing at the (possibly still in-progress) input type."""
+        return _SelfReferenceLazyType(
+            type_name=cls._get_gql_name(input_validator),
+            module=__name__,
+            validator=input_validator,
         )
-        input_cls.__annotations__ = {name: annot for name, annot, value in input_fields}
-        gql_input = typing.cast(
-            "type[ValidatedInput[T]]",
-            strawberry.experimental.pydantic.input(input_validator, name=name)(input_cls),
-        )
-        gql_input.to_pydantic = cls.to_pydantic
-        setattr(gql_input, constants.INPUT_VALIDATOR_ATTR_NAME, input_validator)
-        cls._REGISTRY[input_validator] = gql_input
-        return gql_input
 
     @classmethod
     def _get_field_annotation(  # noqa: C901 PLR0911 PLR0912
@@ -159,6 +208,11 @@ class InputFactory:
                 return meta.gql_type, []
 
         field_type = cls._get_origin_type_from_annotated_type(field_type)
+        if field_type in cls._BUILDING:
+            # Self-referential (or mutually-recursive) field: the target input type is still being
+            # built, so emit a lazy reference to it instead of recursing into `make`.
+            return cls._lazy_self_reference(field_type), []
+
         type_map = app_settings.VALIDATION.PYDANTIC_TO_GQL_INPUT_TYPE
         if field_type in type_map:
             # If the gql input type for this exact type is defined in settings - use it.
@@ -193,6 +247,10 @@ class InputFactory:
                     if annot is not strawberry.auto:
                         is_auto = False
                     ret_types.append(annot)
+                elif internal_origin_type in cls._BUILDING:
+                    # Self-referential / mutually-recursive member of the union, e.g. `Node | None`.
+                    is_auto = False
+                    ret_types.append(cls._lazy_self_reference(internal_origin_type))
                 else:
                     # "Normal" type -> e.g., if field_type is `str | None`
                     ret_types.append(internal_type)
