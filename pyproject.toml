@@ -12,7 +12,7 @@ pydbull = {git = "https://github.com/coexcz/pydbull.git", branch = "master"}
 Django = ">=3.2"
 factory-boy = ">=3.3.1"
 strawberry-graphql-django = ">=0.48.0"
-graphql-sync-dataloaders = { git = "https://github.com/VojtechPetru/graphql-sync-dataloaders.git", rev = "15c80a2" }
+graphql-sync-dataloaders = { git = "https://github.com/VojtechPetru/graphql-sync-dataloaders.git", rev = "ca54bdd" }
 sqids = ">=0.5.0"
 
 [tool.poetry.group.dev.dependencies]
