@@ -54,6 +54,20 @@ class UserCreateInputValidator(strawberry_vercajk.InputValidator):
 > String fields with a default value are marked as optional in the generated Strawberry input type.
 > The null values are automatically converted to an empty string.
 
+>[!TIP]
+> A field which is nullable in the generated schema may be left out of the input entirely.
+> An omitted field is validated as absent, not as null - so a field which is required by the validator
+> reports a `missing` ("Field required") error, and a field with a default value gets its default.
+>
+> Note that omitting a field is therefore not the same as sending `null` for it. For example, given
+> ```python
+> class UserCreateInputValidator(strawberry_vercajk.InputValidator):
+>     note: str | typing.Literal[""]
+> ```
+> the `note` field is `String` (nullable) in the schema, sending `null` stores an empty string,
+> and leaving `note` out returns a `missing` error with `location: ["note"]`.
+> Give the validator field a default value if the field should be omittable.
+
 
 You can create a Strawberry mutation that uses these validators:
 ```python

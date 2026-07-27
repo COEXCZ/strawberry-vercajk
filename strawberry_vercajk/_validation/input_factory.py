@@ -11,8 +11,10 @@ import pydantic_core
 import pydbull
 import strawberry
 from strawberry.experimental.pydantic.conversion import convert_strawberry_class_to_pydantic_model
+from strawberry.types.base import StrawberryOptional
 
 from strawberry_vercajk._app_settings import app_settings
+from strawberry_vercajk._base.types import UNSET
 from strawberry_vercajk._validation import constants, directives
 from strawberry_vercajk._validation.validator import ValidatedInput
 
@@ -128,8 +130,44 @@ class InputFactory:
         )
         gql_input.to_pydantic = cls.to_pydantic
         setattr(gql_input, constants.INPUT_VALIDATOR_ATTR_NAME, input_validator)
+        cls._allow_omitting_nullable_fields(gql_input)
         cls._REGISTRY[input_validator] = gql_input
         return gql_input
+
+    @classmethod
+    def _allow_omitting_nullable_fields(cls, gql_input: type["ValidatedInput"]) -> None:
+        """
+        Accept input which leaves out fields that are nullable in the GraphQL schema.
+
+        Such a field is still a required argument of the input type when the validator requires it
+        (e.g. `str | None` without a default). Omitted ones are filled in with `UNSET`, which `to_pydantic`
+        drops, so the validator sees them as absent instead of null.
+        A field default can't be used instead - `strawberry.experimental.pydantic.input` replaces the fields
+        it is given with its own.
+        """
+        omittable: frozenset[str] = frozenset(
+            field.name
+            for field in dataclasses.fields(gql_input)
+            if field.default is dataclasses.MISSING
+            and field.default_factory is dataclasses.MISSING
+            and cls._is_nullable_in_schema(gql_input, field.name)
+        )
+        if not omittable:
+            return
+
+        dataclass_init = gql_input.__init__
+
+        def init_with_omitted_fields(self: "ValidatedInput", **kwargs: typing.Any) -> None:  # noqa: ANN401
+            for field_name in omittable.difference(kwargs):
+                kwargs[field_name] = UNSET
+            dataclass_init(self, **kwargs)
+
+        gql_input.__init__ = init_with_omitted_fields
+
+    @staticmethod
+    def _is_nullable_in_schema(gql_input: type["ValidatedInput"], field_name: str) -> bool:
+        gql_field = gql_input.__strawberry_definition__.get_field(field_name)
+        return gql_field is not None and isinstance(gql_field.type, StrawberryOptional)
 
     @classmethod
     def _get_field_annotation(  # noqa: C901 PLR0911 PLR0912
@@ -306,12 +344,14 @@ class InputFactory:
         For this reason, we don't convert the nested pydantic objects to pydantic models but keep them as
         dictionaries and then insert this dictionary into the parent (outermost) pydantic object.
         This way, pydantic validates the whole object at once, and we get all validation errors.
+
+        Fields which were left out of the input (see `_allow_omitting_nullable_fields`) are dropped,
+        so that the validator sees them as absent instead of null.
         """
         instance_kwargs = {
-            f.name: convert_strawberry_class_to_pydantic_model(
-                getattr(self, f.name),
-            )
+            f.name: convert_strawberry_class_to_pydantic_model(value)
             for f in dataclasses.fields(self)
+            if (value := getattr(self, f.name)) is not UNSET
         }
         instance_kwargs.update(kwargs)
         if not is_inner:
